@@ -540,7 +540,7 @@ function renderQuiz() {
   const topic = getActiveTopic();
   // NEW: use keyword-filtered questions with fallback to all questions
   const quizQuestions = getQuizQuestions();
-  const question = quizQuestions[state.quiz.currentIndex];
+  const question = quizQuestions[state.quiz.currentIndex] || quizQuestions[0];
 
   quizTitle.textContent = state.selectedTopic ? `Custom topic quiz` : `${topic.name} quiz`;
   quizTopicBadge.textContent = state.selectedTopic || topic.name;
@@ -666,7 +666,8 @@ function showNextButton() {
 
 function renderFlashcards() {
   const topic = getActiveTopic();
-  const currentCard = topic.flashcards[state.flashcards.currentIndex];
+  const cards = topic.flashcards || [];
+  const currentCard = cards[state.flashcards.currentIndex] || cards[0];
 
   flashcardTitle.textContent = `${topic.name} flashcards`;
   flashcardCount.textContent = `${topic.flashcards.length} cards`;
