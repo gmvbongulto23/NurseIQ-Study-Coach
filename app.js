@@ -489,6 +489,11 @@ function getQuizQuestions() {
 
 function setActiveTopic(topicId) {
   state.activeTopicId = topicId;
+
+  // NEW: reset custom topic filter when switching topics
+  state.selectedTopic = "";
+  if (topicInput) topicInput.value = "";
+
   resetQuiz();
   resetFlashcards();
   renderTopics();
