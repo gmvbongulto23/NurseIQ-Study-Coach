@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NurseIQ Study Coach</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <nav class="topbar">
+          <div class="brand">
+            <div class="brand-mark">+</div>
+            <div>
+              <p class="eyebrow">Study smarter for nursing school</p>
+              <h1>NurseIQ Study Coach</h1>
+            </div>
+          </div>
+          <button id="surprise-me" class="ghost-button">Random challenge</button>
+        </nav>
+
+        <section class="hero-grid">
+          <div class="hero-copy">
+            <p class="kicker">Built for quiz week, skills check-offs, and exam crunch time.</p>
+            <p class="hero-text">
+              Review med-surg, pharmacology, fundamentals, pediatrics, and maternal nursing with
+              exam-style questions, flashcards, and focused practice sessions.
+            </p>
+            <div class="hero-actions">
+              <button id="start-quiz" class="primary-button">Start quick quiz</button>
+              <button id="show-flashcards" class="secondary-button">Open flashcards</button>
+            </div>
+          </div>
+
+          <aside class="progress-panel">
+            <p class="panel-label">This week</p>
+            <div class="stat">
+              <span>Questions answered</span>
+              <strong id="questions-answered">0</strong>
+            </div>
+            <div class="stat">
+              <span>Best score</span>
+              <strong id="best-score">0%</strong>
+            </div>
+            <div class="stat">
+              <span>Flashcards mastered</span>
+              <strong id="cards-mastered">0</strong>
+            </div>
+            <div class="streak-card">
+              <p>Keep your streak alive by doing one quiz and one flashcard set today.</p>
+            </div>
+          </aside>
+        </section>
+      </header>
+
+      <main>
+        <section class="topic-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Study tracks</p>
+              <h2>Choose a nursing topic</h2>
+            </div>
+            <p class="section-copy">
+              Each track includes a targeted quiz set and focused flashcards for common exam
+              content.
+            </p>
+          </div>
+          <div id="topic-grid" class="topic-grid"></div>
+        </section>
+
+        <section class="workspace-grid">
+          <section class="study-card quiz-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Quiz mode</p>
+                <h3 id="quiz-title">Ready for a quick check?</h3>
+              </div>
+              <span id="quiz-topic-badge" class="badge">All topics</span>
+            </div>
+            <div id="quiz-meta" class="quiz-meta">Select a topic to load a 5-question quiz.</div>
+            <div id="quiz-area" class="quiz-area"></div>
+          </section>
+
+          <section class="study-card flashcard-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Flashcards</p>
+                <h3 id="flashcard-title">Concept review</h3>
+              </div>
+              <span id="flashcard-count" class="badge">0 cards</span>
+            </div>
+            <div id="flashcard-area" class="flashcard-area">
+              <p class="placeholder-text">Choose a topic to start flipping through nursing concepts.</p>
+            </div>
+          </section>
+        </section>
+
+        <section class="study-card planner-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Exam prep</p>
+              <h2>Smart review planner</h2>
+            </div>
+            <p class="section-copy">
+              Use this checklist to structure short study sessions before quizzes, unit exams, or
+              final exams.
+            </p>
+          </div>
+          <div class="planner-grid">
+            <div class="planner-step">
+              <span>1</span>
+              <h4>Warm up</h4>
+              <p>Start with 5 flashcards to reactivate key safety concepts and nursing priorities.</p>
+            </div>
+            <div class="planner-step">
+              <span>2</span>
+              <h4>Practice</h4>
+              <p>Complete one timed quiz and review the rationale for every missed question.</p>
+            </div>
+            <div class="planner-step">
+              <span>3</span>
+              <h4>Strengthen</h4>
+              <p>Repeat the weakest topic until you can explain the answer out loud like a tutor.</p>
+            </div>
+            <div class="planner-step">
+              <span>4</span>
+              <h4>Finish strong</h4>
+              <p>End with one SATA-style question and one delegation or priority question.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
