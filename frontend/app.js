@@ -304,6 +304,8 @@ const state = {
   activeTopicId: studyTopics[0].id,
   // NEW: stores the user's topic keyword input
   selectedTopic: "",
+  // NEW: AI integration
+  aiQuestions: [],
   quiz: {
     currentIndex: 0,
     selectedOption: null,
@@ -364,7 +366,8 @@ applyTopicButton.addEventListener("click", () => {
     return;
   }
 
-  generateQuestionsForTopic(topic);
+  // UPDATED: use AI questions first, then fallback to local questions.
+  generateAIQuestions(topic);
 });
 
 topicInput.addEventListener("keydown", (event) => {
@@ -380,7 +383,8 @@ topicInput.addEventListener("keydown", (event) => {
     return;
   }
 
-  generateQuestionsForTopic(topic);
+  // UPDATED: use AI questions first, then fallback to local questions.
+  generateAIQuestions(topic);
 });
 
 uploadFileButton?.addEventListener("click", () => {
@@ -490,8 +494,46 @@ async function fetchGeneratedQuestions(endpoint, requestOptions) {
   return questions;
 }
 
+// NEW: AI integration
+async function generateAIQuestions(topic) {
+  state.selectedTopic = topic.toLowerCase();
+  setAiStatus(`Generating NCLEX-style questions for "${topic}"...`, "loading");
+  setAiControlsLoading(true);
+
+  try {
+    const questions = await fetchGeneratedQuestions("/generate-questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic }),
+    });
+
+    state.aiQuestions = normalizeGeneratedQuestions(
+      questions,
+      AI_TOPIC_ID,
+      `AI: ${topic}`,
+      `AI-generated NCLEX-style questions about ${topic}.`
+    );
+    resetQuiz();
+    renderQuiz();
+    setAiStatus("AI quiz loaded. Pick an answer to begin.", "success");
+  } catch (err) {
+    console.error("AI generation failed", err);
+    state.aiQuestions = [];
+    resetQuiz();
+    renderQuiz();
+    setAiStatus(
+      `AI unavailable: ${err.message}. Showing matching local questions instead.`,
+      "error"
+    );
+  } finally {
+    setAiControlsLoading(false);
+  }
+}
+
 function upsertGeneratedTopic({ id, name, description, questions }) {
   const normalizedQuestions = normalizeGeneratedQuestions(questions, id, name, description);
+  // UPDATED: PDF/generated-topic flows should not keep topic AI questions active.
+  state.aiQuestions = [];
   const generatedTopic = {
     id,
     name,
@@ -694,8 +736,13 @@ function getAllQuestions() {
   return builtInQuestions;
 }
 
-// MODIFIED: Return active topic questions when no custom topic, filter all when custom
+// UPDATED: use AI questions first, then fallback to local question filtering.
 function getQuizQuestions() {
+  // NEW: AI integration
+  if (state.aiQuestions.length) {
+    return state.aiQuestions;
+  }
+
   const keyword = state.selectedTopic.trim();
 
   if (!keyword) {
@@ -729,6 +776,11 @@ function getQuizQuestions() {
 
 function getCurrentQuizQuestions() {
   const activeTopic = getActiveTopic();
+
+  // UPDATED: topic-generated AI questions should override the active local topic.
+  if (state.aiQuestions.length) {
+    return getQuizQuestions();
+  }
 
   if (activeTopic?.isGenerated) {
     return activeTopic.questions;
@@ -806,8 +858,9 @@ function getDailyFlashcards(topic) {
 function setActiveTopic(topicId) {
   state.activeTopicId = topicId;
 
-  // NEW: reset custom topic filter when switching topics
+  // UPDATED: reset custom topic and AI questions when switching topics
   state.selectedTopic = "";
+  state.aiQuestions = [];
   if (topicInput) topicInput.value = "";
 
   resetQuiz();
@@ -858,19 +911,25 @@ function renderQuiz() {
   const quizQuestions = getCurrentQuizQuestions();
   const question = quizQuestions[state.quiz.currentIndex];
   const isGeneratedTopic = Boolean(topic?.isGenerated);
+  // NEW: AI integration
+  const isAiQuestionSet = state.aiQuestions.length > 0;
   const displayTopicName = state.selectedTopic || topic.name;
 
-  quizTitle.textContent = isGeneratedTopic
+  quizTitle.textContent = isAiQuestionSet
+    ? "AI topic quiz"
+    : isGeneratedTopic
     ? `${topic.name} quiz`
     : state.selectedTopic
-      ? "Local fallback quiz"
-      : `${topic.name} quiz`;
+    ? "Local fallback quiz"
+    : `${topic.name} quiz`;
   quizTopicBadge.textContent = displayTopicName;
-  quizMeta.textContent = isGeneratedTopic
+  quizMeta.textContent = isAiQuestionSet
+    ? `${quizQuestions.length} AI-generated NCLEX-style questions with rationales.`
+    : isGeneratedTopic
     ? `${quizQuestions.length} AI-generated NCLEX-style questions with rationales.`
     : state.selectedTopic
-      ? `Showing local questions matching "${state.selectedTopic}"${quizQuestions.length === getAllQuestions().length ? " with fallback to all questions." : "."}`
-      : `${quizQuestions.length}-question practice set with quick rationales to help you remember why the right answer matters.`;
+    ? `Showing local questions matching "${state.selectedTopic}"${quizQuestions.length === getAllQuestions().length ? " with fallback to all questions." : "."}`
+    : `${quizQuestions.length}-question practice set with quick rationales to help you remember why the right answer matters.`;
 
   if (!question) {
     quizArea.innerHTML = `
