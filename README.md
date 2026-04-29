@@ -86,3 +86,5 @@ localStorage.setItem("nurseiq-backend-url", "https://your-backend-url.onrender.c
 ```
 
 Users can then generate AI questions through your backend without seeing your API key.
+
+If you host the frontend and backend together on Render, you do not need to set `nurseiq-backend-url`; the app uses the current Render URL automatically.

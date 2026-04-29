@@ -336,7 +336,6 @@ const flashcardArea = document.getElementById("flashcard-area");
 const questionsAnsweredEl = document.getElementById("questions-answered");
 const bestScoreEl = document.getElementById("best-score");
 const cardsMasteredEl = document.getElementById("cards-mastered");
-const DEFAULT_BACKEND_URL = "http://localhost:3000";
 const AI_TOPIC_ID = "ai-generated-topic";
 const PDF_TOPIC_ID = "ai-generated-pdf";
 
@@ -398,7 +397,16 @@ uploadFileButton?.addEventListener("click", () => {
 function getBackendUrl() {
   const configuredUrl =
     localStorage.getItem("nurseiq-backend-url") || localStorage.getItem("backend-url") || "";
-  return (configuredUrl.trim() || DEFAULT_BACKEND_URL).replace(/\/+$/, "");
+
+  if (configuredUrl.trim()) {
+    return configuredUrl.trim().replace(/\/+$/, "");
+  }
+
+  if (window.location.protocol === "file:") {
+    return "http://localhost:3000";
+  }
+
+  return window.location.origin.replace(/\/+$/, "");
 }
 
 function setAiStatus(message, type = "") {
