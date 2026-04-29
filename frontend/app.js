@@ -316,7 +316,6 @@ const state = {
     showBack: false,
   },
   progress: loadProgress(),
-  // NEW: lightweight Duolingo-style mastery tracking profile
   learningProfile: loadLearningProfile(),
 };
 
@@ -327,6 +326,9 @@ const quizMeta = document.getElementById("quiz-meta");
 // NEW: topic input references
 const topicInput = document.getElementById("topic-input");
 const applyTopicButton = document.getElementById("apply-topic");
+const pdfUploadInput = document.getElementById("pdf-upload");
+const uploadFileButton = document.getElementById("upload-file");
+const aiStatus = document.getElementById("ai-status");
 const quizArea = document.getElementById("quiz-area");
 const flashcardTitle = document.getElementById("flashcard-title");
 const flashcardCount = document.getElementById("flashcard-count");
@@ -334,6 +336,9 @@ const flashcardArea = document.getElementById("flashcard-area");
 const questionsAnsweredEl = document.getElementById("questions-answered");
 const bestScoreEl = document.getElementById("best-score");
 const cardsMasteredEl = document.getElementById("cards-mastered");
+const DEFAULT_BACKEND_URL = "http://localhost:3000";
+const AI_TOPIC_ID = "ai-generated-topic";
+const PDF_TOPIC_ID = "ai-generated-pdf";
 
 document.getElementById("start-quiz").addEventListener("click", () => {
   resetQuiz();
@@ -347,25 +352,242 @@ document.getElementById("show-flashcards").addEventListener("click", () => {
 });
 
 document.getElementById("surprise-me").addEventListener("click", () => {
-  const randomTopic = studyTopics[Math.floor(Math.random() * studyTopics.length)];
+  const builtInTopics = studyTopics.filter((topic) => !topic.isGenerated);
+  const randomTopic = builtInTopics[Math.floor(Math.random() * builtInTopics.length)];
   setActiveTopic(randomTopic.id);
 });
 
-// NEW: apply custom topic keyword without changing the existing layout
 applyTopicButton.addEventListener("click", () => {
-  state.selectedTopic = topicInput.value.trim().toLowerCase();
-  resetQuiz();
-  renderQuiz();
+  const topic = topicInput.value.trim();
+
+  if (!topic) {
+    setAiStatus("Enter a topic before generating questions.", "error");
+    return;
+  }
+
+  generateQuestionsForTopic(topic);
 });
 
-// NEW: allow Enter key on the topic input
 topicInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    state.selectedTopic = topicInput.value.trim().toLowerCase();
-    resetQuiz();
-    renderQuiz();
+  if (event.key !== "Enter") {
+    return;
   }
+
+  event.preventDefault();
+  const topic = topicInput.value.trim();
+
+  if (!topic) {
+    setAiStatus("Enter a topic before generating questions.", "error");
+    return;
+  }
+
+  generateQuestionsForTopic(topic);
 });
+
+uploadFileButton?.addEventListener("click", () => {
+  const file = pdfUploadInput?.files?.[0];
+
+  if (!file) {
+    setAiStatus("Choose a PDF file before generating questions.", "error");
+    return;
+  }
+
+  generateQuestionsForPdf(file);
+});
+
+function getBackendUrl() {
+  const configuredUrl =
+    localStorage.getItem("nurseiq-backend-url") || localStorage.getItem("backend-url") || "";
+  return (configuredUrl.trim() || DEFAULT_BACKEND_URL).replace(/\/+$/, "");
+}
+
+function setAiStatus(message, type = "") {
+  if (!aiStatus) {
+    return;
+  }
+
+  aiStatus.textContent = message;
+  aiStatus.className = `ai-status${type ? ` ${type}` : ""}`;
+  aiStatus.setAttribute("aria-busy", type === "loading" ? "true" : "false");
+}
+
+function setAiControlsLoading(isLoading) {
+  [applyTopicButton, uploadFileButton, topicInput, pdfUploadInput].forEach((control) => {
+    if (control) {
+      control.disabled = isLoading;
+    }
+  });
+}
+
+function normalizeGeneratedQuestions(questions, topicId, topicName, topicDescription) {
+  if (!Array.isArray(questions) || questions.length !== 5) {
+    throw new Error("The backend returned an invalid question set.");
+  }
+
+  return questions.map((question, questionIndex) => {
+    const answer = Number(question.answer);
+    const options = Array.isArray(question.options)
+      ? question.options.map((option) => String(option).trim())
+      : [];
+
+    if (
+      typeof question.prompt !== "string" ||
+      !question.prompt.trim() ||
+      options.length !== 4 ||
+      options.some((option) => !option) ||
+      !Number.isInteger(answer) ||
+      answer < 0 ||
+      answer > 3 ||
+      typeof question.rationale !== "string" ||
+      !question.rationale.trim()
+    ) {
+      throw new Error(`Question ${questionIndex + 1} was not valid strict JSON.`);
+    }
+
+    return {
+      prompt: question.prompt.trim(),
+      options,
+      answer,
+      rationale: question.rationale.trim(),
+      topicId,
+      topicName,
+      topicDescription,
+    };
+  });
+}
+
+async function readApiError(response) {
+  try {
+    const data = await response.json();
+    return data.error || "Question generation failed.";
+  } catch {
+    return "Question generation failed.";
+  }
+}
+
+async function fetchGeneratedQuestions(endpoint, requestOptions) {
+  const response = await fetch(`${getBackendUrl()}${endpoint}`, requestOptions);
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
+  }
+
+  const data = await response.json();
+  const questions = Array.isArray(data) ? data : data.questions;
+
+  if (!Array.isArray(questions)) {
+    throw new Error("The backend response did not include questions.");
+  }
+
+  return questions;
+}
+
+function upsertGeneratedTopic({ id, name, description, questions }) {
+  const normalizedQuestions = normalizeGeneratedQuestions(questions, id, name, description);
+  const generatedTopic = {
+    id,
+    name,
+    description,
+    questions: normalizedQuestions,
+    flashcards: [],
+    isGenerated: true,
+  };
+  const existingIndex = studyTopics.findIndex((topic) => topic.id === id);
+
+  if (existingIndex >= 0) {
+    studyTopics[existingIndex] = generatedTopic;
+  } else {
+    studyTopics.push(generatedTopic);
+  }
+
+  state.activeTopicId = id;
+  state.selectedTopic = "";
+  resetQuiz();
+  resetFlashcards();
+  renderTopics();
+  renderQuiz();
+  renderFlashcards();
+}
+
+async function generateQuestionsForTopic(topic) {
+  setAiStatus(`Generating NCLEX-style questions for "${topic}"...`, "loading");
+  setAiControlsLoading(true);
+
+  try {
+    const questions = await fetchGeneratedQuestions("/generate-questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic }),
+    });
+
+    upsertGeneratedTopic({
+      id: AI_TOPIC_ID,
+      name: `AI: ${topic}`,
+      description: `AI-generated NCLEX-style questions about ${topic}.`,
+      questions,
+    });
+    setAiStatus("AI quiz loaded. Pick an answer to begin.", "success");
+  } catch (error) {
+    console.error("AI topic generation failed:", error);
+    const fallbackTopic = studyTopics.find((studyTopic) => !studyTopic.isGenerated) || studyTopics[0];
+    state.activeTopicId = fallbackTopic.id;
+    state.selectedTopic = topic.toLowerCase();
+    resetQuiz();
+    resetFlashcards();
+    renderTopics();
+    renderQuiz();
+    renderFlashcards();
+    setAiStatus(
+      `AI unavailable: ${error.message}. Showing matching local questions instead.`,
+      "error"
+    );
+  } finally {
+    setAiControlsLoading(false);
+  }
+}
+
+async function generateQuestionsForPdf(file) {
+  if (file.type && file.type !== "application/pdf") {
+    setAiStatus("Only PDF uploads are supported.", "error");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  setAiStatus(`Reading "${file.name}" and generating questions...`, "loading");
+  setAiControlsLoading(true);
+
+  try {
+    const questions = await fetchGeneratedQuestions("/upload-file", {
+      method: "POST",
+      body: formData,
+    });
+
+    upsertGeneratedTopic({
+      id: PDF_TOPIC_ID,
+      name: "AI: Uploaded PDF",
+      description: `AI-generated NCLEX-style questions from ${file.name}.`,
+      questions,
+    });
+    setAiStatus("PDF quiz loaded. Your uploaded content is ready for practice.", "success");
+  } catch (error) {
+    console.error("PDF generation failed:", error);
+    const fallbackTopic = studyTopics.find((studyTopic) => !studyTopic.isGenerated) || studyTopics[0];
+    state.activeTopicId = fallbackTopic.id;
+    state.selectedTopic = "";
+    resetQuiz();
+    resetFlashcards();
+    renderTopics();
+    renderQuiz();
+    renderFlashcards();
+    setAiStatus(
+      `PDF generation failed: ${error.message}. The built-in quiz is still available.`,
+      "error"
+    );
+  } finally {
+    setAiControlsLoading(false);
+  }
+}
 
 function loadProgress() {
   const fallback = { questionsAnswered: 0, bestScore: 0, cardsMastered: 0 };
@@ -450,25 +672,35 @@ function getWeakTopics() {
 
 // NEW: flatten all questions and attach topic metadata for keyword matching
 function getAllQuestions() {
-  return studyTopics.flatMap((topic) =>
-    topic.questions.map((question) => ({
-      ...question,
-      topicId: topic.id,
-      topicName: topic.name,
-      topicDescription: topic.description,
-    }))
-  );
+  const builtInQuestions = studyTopics
+    .filter((topic) => !topic.isGenerated)
+    .flatMap((topic) =>
+      topic.questions.map((question) => ({
+        ...question,
+        topicId: topic.id,
+        topicName: topic.name,
+        topicDescription: topic.description,
+      }))
+    );
+  
+  return builtInQuestions;
 }
 
-// NEW: simple includes() matching with fallback to all questions
+// MODIFIED: Return active topic questions when no custom topic, filter all when custom
 function getQuizQuestions() {
-  const allQuestions = getAllQuestions();
   const keyword = state.selectedTopic.trim();
 
   if (!keyword) {
-    return allQuestions;
+    const activeTopic = getActiveTopic();
+    return activeTopic.questions.map((question) => ({
+      ...question,
+      topicId: activeTopic.id,
+      topicName: activeTopic.name,
+      topicDescription: activeTopic.description,
+    }));
   }
 
+  const allQuestions = getAllQuestions();
   const filteredQuestions = allQuestions.filter((question) => {
     const searchableText = [
       question.topicId,
@@ -485,6 +717,82 @@ function getQuizQuestions() {
   });
 
   return filteredQuestions.length ? filteredQuestions : allQuestions;
+}
+
+function getCurrentQuizQuestions() {
+  const activeTopic = getActiveTopic();
+
+  if (activeTopic?.isGenerated) {
+    return activeTopic.questions;
+  }
+
+  return getQuizQuestions();
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[character];
+  });
+}
+
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function hashString(value) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function seededRandom(seed) {
+  let value = seed >>> 0;
+
+  return () => {
+    value += 0x6d2b79f5;
+    let nextValue = value;
+    nextValue = Math.imul(nextValue ^ (nextValue >>> 15), nextValue | 1);
+    nextValue ^= nextValue + Math.imul(nextValue ^ (nextValue >>> 7), nextValue | 61);
+    return ((nextValue ^ (nextValue >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle(items, seed) {
+  const shuffledItems = [...items];
+  const random = seededRandom(seed);
+
+  for (let index = shuffledItems.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffledItems[index], shuffledItems[swapIndex]] = [
+      shuffledItems[swapIndex],
+      shuffledItems[index],
+    ];
+  }
+
+  return shuffledItems;
+}
+
+function getDailyFlashcards(topic) {
+  const cards = topic?.flashcards || [];
+  const seed = hashString(`${topic?.id || "topic"}:${getLocalDateKey()}`);
+
+  return seededShuffle(cards, seed);
 }
 
 function setActiveTopic(topicId) {
@@ -523,12 +831,13 @@ function renderTopics() {
   studyTopics.forEach((topic) => {
     const tile = document.createElement("article");
     tile.className = `topic-tile${topic.id === state.activeTopicId ? " is-active" : ""}`;
+    const questionLabel = topic.isGenerated ? "AI quiz questions" : "quiz questions";
 
     tile.innerHTML = `
-      <p class="topic-tag">${topic.questions.length} quiz questions</p>
-      <h3>${topic.name}</h3>
-      <p class="topic-meta">${topic.description}</p>
-      <button class="topic-button" type="button">Study ${topic.name}</button>
+      <p class="topic-tag">${topic.questions.length} ${questionLabel}</p>
+      <h3>${escapeHtml(topic.name)}</h3>
+      <p class="topic-meta">${escapeHtml(topic.description)}</p>
+      <button class="topic-button" type="button">Study ${escapeHtml(topic.name)}</button>
     `;
 
     tile.querySelector("button").addEventListener("click", () => setActiveTopic(topic.id));
@@ -538,21 +847,38 @@ function renderTopics() {
 
 function renderQuiz() {
   const topic = getActiveTopic();
-  // NEW: use keyword-filtered questions with fallback to all questions
-  const quizQuestions = getQuizQuestions();
-  const question = quizQuestions[state.quiz.currentIndex] || quizQuestions[0];
+  const quizQuestions = getCurrentQuizQuestions();
+  const question = quizQuestions[state.quiz.currentIndex];
+  const isGeneratedTopic = Boolean(topic?.isGenerated);
+  const displayTopicName = state.selectedTopic || topic.name;
 
-  quizTitle.textContent = state.selectedTopic ? `Custom topic quiz` : `${topic.name} quiz`;
-  quizTopicBadge.textContent = state.selectedTopic || topic.name;
-  quizMeta.textContent = state.selectedTopic
-    ? `Showing questions matching "${state.selectedTopic}"${quizQuestions.length === getAllQuestions().length ? " with fallback to all questions." : "."}`
-    : `5-question practice set with quick rationales to help you remember why the right answer matters.`;
+  quizTitle.textContent = isGeneratedTopic
+    ? `${topic.name} quiz`
+    : state.selectedTopic
+      ? "Local fallback quiz"
+      : `${topic.name} quiz`;
+  quizTopicBadge.textContent = displayTopicName;
+  quizMeta.textContent = isGeneratedTopic
+    ? `${quizQuestions.length} AI-generated NCLEX-style questions with rationales.`
+    : state.selectedTopic
+      ? `Showing local questions matching "${state.selectedTopic}"${quizQuestions.length === getAllQuestions().length ? " with fallback to all questions." : "."}`
+      : `${quizQuestions.length}-question practice set with quick rationales to help you remember why the right answer matters.`;
+
+  if (!question) {
+    quizArea.innerHTML = `
+      <div class="quiz-result">
+        <p>No questions are available for this quiz yet.</p>
+        <p>Choose a built-in track or generate a new AI quiz.</p>
+      </div>
+    `;
+    return;
+  }
 
   if (state.quiz.completed) {
     const percent = Math.round((state.quiz.score / quizQuestions.length) * 100);
     quizArea.innerHTML = `
       <div class="quiz-result">
-        <p>You finished the ${state.selectedTopic || topic.name} set.</p>
+        <p>You finished the ${escapeHtml(displayTopicName)} set.</p>
         <p><strong>Score:</strong> ${state.quiz.score}/${quizQuestions.length} (${percent}%)</p>
         <p>Review the flashcards next, then replay the quiz to improve your score.</p>
       </div>
@@ -571,13 +897,13 @@ function renderQuiz() {
   quizArea.innerHTML = `
     <div class="question-block">
       <p class="question-progress">Question ${state.quiz.currentIndex + 1} of ${quizQuestions.length}</p>
-      <p class="question-prompt">${question.prompt}</p>
+      <p class="question-prompt">${escapeHtml(question.prompt)}</p>
       <div class="quiz-options">
         ${question.options
           .map(
             (option, index) => `
             <button class="option-button${state.quiz.selectedOption === index ? " selected" : ""}" data-index="${index}" type="button">
-              ${option}
+              ${escapeHtml(option)}
             </button>
           `
           )
@@ -586,7 +912,7 @@ function renderQuiz() {
       <div class="quiz-controls">
         <button class="quiz-submit" type="button" id="check-answer">Check answer</button>
       </div>
-      ${state.quiz.answersChecked ? `<div class="answer-rationale">${question.rationale}</div>` : ""}
+      ${state.quiz.answersChecked ? `<div class="answer-rationale">${escapeHtml(question.rationale)}</div>` : ""}
     </div>
   `;
 
@@ -634,7 +960,7 @@ function highlightAnswer(correctIndex, selectedIndex) {
 
 function showNextButton() {
   // NEW: keep next/finish behavior aligned with filtered question set
-  const quizQuestions = getQuizQuestions();
+  const quizQuestions = getCurrentQuizQuestions();
   const controls = quizArea.querySelector(".quiz-controls");
   controls.innerHTML = `
     <button class="quiz-submit" type="button" id="next-question">
@@ -666,18 +992,32 @@ function showNextButton() {
 
 function renderFlashcards() {
   const topic = getActiveTopic();
-  const cards = topic.flashcards || [];
-  const currentCard = cards[state.flashcards.currentIndex] || cards[0];
+  const cards = getDailyFlashcards(topic);
 
   flashcardTitle.textContent = `${topic.name} flashcards`;
-  flashcardCount.textContent = `${topic.flashcards.length} cards`;
+  flashcardCount.textContent = `${cards.length} daily cards`;
+
+  if (!cards.length) {
+    flashcardArea.innerHTML = `
+      <p class="placeholder-text">
+        Flashcards are available for built-in study tracks. Choose a track to review today's shuffled deck.
+      </p>
+    `;
+    return;
+  }
+
+  if (state.flashcards.currentIndex >= cards.length) {
+    state.flashcards.currentIndex = 0;
+  }
+
+  const currentCard = cards[state.flashcards.currentIndex];
 
   flashcardArea.innerHTML = `
     <div class="flashcard">
       <div>
         <p class="flashcard-label">${state.flashcards.showBack ? "Answer" : "Prompt"}</p>
         <p class="${state.flashcards.showBack ? "flashcard-back" : "flashcard-front"}">
-          ${state.flashcards.showBack ? currentCard.back : currentCard.front}
+          ${escapeHtml(state.flashcards.showBack ? currentCard.back : currentCard.front)}
         </p>
       </div>
       <div class="flashcard-controls">
@@ -685,7 +1025,7 @@ function renderFlashcards() {
           ${state.flashcards.showBack ? "Show front" : "Flip card"}
         </button>
         <button class="card-action" type="button" id="next-card">
-          ${state.flashcards.currentIndex === topic.flashcards.length - 1 ? "Restart deck" : "Next card"}
+          ${state.flashcards.currentIndex === cards.length - 1 ? "Restart deck" : "Next card"}
         </button>
         <button class="card-action" type="button" id="master-card">Mark mastered</button>
       </div>
@@ -698,7 +1038,7 @@ function renderFlashcards() {
   });
 
   document.getElementById("next-card").addEventListener("click", () => {
-    if (state.flashcards.currentIndex === topic.flashcards.length - 1) {
+    if (state.flashcards.currentIndex === cards.length - 1) {
       state.flashcards.currentIndex = 0;
     } else {
       state.flashcards.currentIndex += 1;

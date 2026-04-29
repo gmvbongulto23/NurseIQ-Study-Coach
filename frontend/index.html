@@ -23,7 +23,9 @@
               <h1>NurseIQ Study Coach</h1>
             </div>
           </div>
-          <button id="surprise-me" class="ghost-button">Random challenge</button>
+          <div class="topbar-actions">
+            <button id="surprise-me" class="ghost-button">Random challenge</button>
+          </div>
         </nav>
 
         <section class="hero-grid">
@@ -85,16 +87,20 @@
               <span id="quiz-topic-badge" class="badge">All topics</span>
             </div>
             <div id="quiz-meta" class="quiz-meta">Select a topic to load a 5-question quiz.</div>
-            <!-- NEW: simple topic input system -->
             <div class="quiz-controls">
               <input
                 id="topic-input"
                 type="text"
-                placeholder="Enter topic keyword"
-                aria-label="Enter topic keyword"
+                placeholder="Enter AI topic, e.g. heart failure"
+                aria-label="Enter AI topic"
               />
-              <button id="apply-topic" class="secondary-button" type="button">Apply topic</button>
+              <button id="apply-topic" class="secondary-button" type="button">Generate topic quiz</button>
             </div>
+            <div class="quiz-controls file-upload-controls">
+              <input id="pdf-upload" type="file" accept="application/pdf" aria-label="Upload PDF study material" />
+              <button id="upload-file" class="secondary-button" type="button">Generate from PDF</button>
+            </div>
+            <p id="ai-status" class="ai-status" aria-live="polite"></p>
             <div id="quiz-area" class="quiz-area"></div>
           </section>
 

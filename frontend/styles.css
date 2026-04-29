@@ -59,7 +59,8 @@ button {
 .hero-actions,
 .quiz-options,
 .quiz-controls,
-.flashcard-controls {
+.flashcard-controls,
+.topbar-actions {
   display: flex;
 }
 
@@ -74,6 +75,10 @@ button {
   display: flex;
   gap: 14px;
   align-items: center;
+}
+
+.topbar-actions {
+  gap: 12px;
 }
 
 .brand-mark {
@@ -210,6 +215,12 @@ p {
 .quiz-submit:hover,
 .card-action:hover {
   transform: translateY(-2px);
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
 }
 
 .progress-panel {
@@ -371,6 +382,61 @@ main {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 18px;
+}
+
+.ai-status {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  min-height: 20px;
+}
+
+.ai-status:empty {
+  display: none;
+}
+
+.ai-status.loading {
+  background: rgba(255, 211, 107, 0.2);
+  color: var(--primary);
+}
+
+.ai-status.success {
+  background: rgba(15, 123, 108, 0.15);
+  color: var(--primary-deep);
+}
+
+.ai-status.error {
+  background: rgba(200, 57, 57, 0.15);
+  color: #c83939;
+}
+
+#topic-input,
+#pdf-upload {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 0.95rem;
+  min-width: 200px;
+  background: white;
+  color: var(--text);
+}
+
+.file-upload-controls {
+  margin-top: 10px;
+}
+
+#pdf-upload::file-selector-button {
+  margin-right: 12px;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: rgba(15, 123, 108, 0.1);
+  color: var(--primary-deep);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .answer-rationale,
